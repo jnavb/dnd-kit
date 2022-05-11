@@ -3,15 +3,17 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
-  DragStartEvent,
   useSensor,
   useSensors,
   PointerSensor,
   KeyboardSensor,
   useDndContext,
-  MeasuringConfiguration,
   MeasuringStrategy,
+} from '@dnd-kit/core';
+import type {
+  DragStartEvent,
   DragEndEvent,
+  MeasuringConfiguration,
 } from '@dnd-kit/core';
 import {
   arrayMove,

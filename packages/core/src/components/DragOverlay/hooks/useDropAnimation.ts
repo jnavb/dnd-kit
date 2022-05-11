@@ -1,138 +1,167 @@
-import {useState} from 'react';
-import {CSS, Transform, useIsomorphicLayoutEffect} from '@dnd-kit/utilities';
+import {CSS, useEvent, getWindow} from '@dnd-kit/utilities';
+import type {DeepRequired, Transform} from '@dnd-kit/utilities';
 
-import type {UniqueIdentifier} from '../../../types';
 import type {DraggableNodes} from '../../../store';
+import type {ClientRect} from '../../../types';
 import {getMeasurableNode} from '../../../utilities/nodes';
-import {getTransformAgnosticClientRect} from '../../../utilities/rect';
+import {scrollIntoViewIfNeeded} from '../../../utilities/scroll';
+import {parseTransform} from '../../../utilities/transform';
+import type {MeasuringConfiguration} from '../../DndContext';
+import type {Animation} from '../components';
 
-export interface DropAnimation {
+export interface DropAnimationOptions {
   duration: number;
   easing: string;
   dragSourceOpacity?: number;
 }
 
+export type DropAnimation = DropAnimationFunction | DropAnimationOptions;
+
 interface Arguments {
-  activeId: UniqueIdentifier | null;
-  animate: boolean;
-  adjustScale: boolean;
   draggableNodes: DraggableNodes;
-  duration: DropAnimation['duration'] | undefined;
-  easing: DropAnimation['easing'] | undefined;
-  dragSourceOpacity: DropAnimation['dragSourceOpacity'] | undefined;
-  node: HTMLElement | null;
-  transform: Transform | undefined;
+  measuringConfiguration: DeepRequired<MeasuringConfiguration>;
+  config?: DropAnimation | null;
 }
 
-export const defaultDropAnimation: DropAnimation = {
+interface CustomDropAnimationArguments {
+  active: {
+    node: HTMLElement;
+    rect: ClientRect;
+  };
+  dragOverlay: {
+    node: HTMLElement;
+    rect: ClientRect;
+  };
+  transform: Transform;
+}
+
+type DropAnimationFunction = (
+  args: CustomDropAnimationArguments
+) => ReturnType<Animation>;
+
+export const defaultDropAnimationConfiguration: DropAnimationOptions = {
   duration: 250,
   easing: 'ease',
   dragSourceOpacity: 0,
 };
 
 export function useDropAnimation({
-  animate,
-  adjustScale,
-  activeId,
+  config = defaultDropAnimationConfiguration,
+  measuringConfiguration,
   draggableNodes,
-  duration,
-  dragSourceOpacity,
-  easing,
-  node,
-  transform,
 }: Arguments) {
-  const [dropAnimationComplete, setDropAnimationComplete] = useState(false);
-
-  useIsomorphicLayoutEffect(() => {
-    if (!animate || !activeId || !easing || !duration) {
-      if (animate) {
-        setDropAnimationComplete(true);
-      }
-
+  return useEvent<Animation>((id, node) => {
+    if (config == null) {
       return;
     }
 
-    const finalNode = draggableNodes[activeId]?.node.current;
+    const activeNode = draggableNodes[id]?.node.current;
 
-    if (transform && node && finalNode && finalNode.parentNode !== null) {
-      const fromNode = getMeasurableNode(node);
+    if (!activeNode) {
+      return;
+    }
 
-      if (fromNode) {
-        const from = fromNode.getBoundingClientRect();
-        const to = getTransformAgnosticClientRect(finalNode);
+    const measurableNode = getMeasurableNode(node);
 
-        const delta = {
-          x: from.left - to.left,
-          y: from.top - to.top,
-        };
+    if (!measurableNode) {
+      return;
+    }
+    const {transform} = getWindow(node).getComputedStyle(node);
+    const parsedTransform = parseTransform(transform);
 
-        if (Math.abs(delta.x) || Math.abs(delta.y)) {
-          const scaleDelta = {
-            scaleX: adjustScale
-              ? (to.width * transform.scaleX) / from.width
-              : 1,
-            scaleY: adjustScale
-              ? (to.height * transform.scaleY) / from.height
-              : 1,
-          };
-          const finalTransform = CSS.Transform.toString({
-            x: transform.x - delta.x,
-            y: transform.y - delta.y,
-            ...scaleDelta,
-          });
-          const originalOpacity = finalNode.style.opacity;
+    if (!parsedTransform) {
+      return;
+    }
 
-          if (dragSourceOpacity != null) {
-            finalNode.style.opacity = `${dragSourceOpacity}`;
-          }
+    const animation: DropAnimationFunction =
+      typeof config === 'function'
+        ? config
+        : createDefaultDropAnimation(config);
 
-          const nodeAnimation = node.animate(
-            [
-              {
-                transform: CSS.Transform.toString(transform),
-              },
-              {
-                transform: finalTransform,
-              },
-            ],
-            {
-              easing,
-              duration,
-            }
-          );
+    scrollIntoViewIfNeeded(
+      activeNode,
+      measuringConfiguration.draggable.measure
+    );
 
-          nodeAnimation.onfinish = () => {
-            node.style.display = 'none';
+    return animation({
+      active: {
+        node: activeNode,
+        rect: measuringConfiguration.draggable.measure(activeNode),
+      },
+      dragOverlay: {
+        node,
+        rect: measuringConfiguration.dragOverlay.measure(measurableNode),
+      },
+      transform: parsedTransform,
+    });
+  });
+}
 
-            setDropAnimationComplete(true);
+function createDefaultDropAnimation(
+  options: DropAnimationOptions
+): DropAnimationFunction {
+  return ({active, dragOverlay, transform}) => {
+    const {duration, easing, dragSourceOpacity} = options;
 
-            if (finalNode && dragSourceOpacity != null) {
-              finalNode.style.opacity = originalOpacity;
-            }
-          };
-          return;
-        }
+    if (!duration) {
+      // Do not animate if animation duration is zero.
+      return;
+    }
+
+    const delta = {
+      x: dragOverlay.rect.left - active.rect.left,
+      y: dragOverlay.rect.top - active.rect.top,
+    };
+
+    if (!delta.x && !delta.y) {
+      // Drag overlay is already positioned over active draggable node
+      // no drop animation required, return early.
+      return;
+    }
+
+    const scale = {
+      scaleX:
+        transform.scaleX !== 1
+          ? (active.rect.width * transform.scaleX) / dragOverlay.rect.width
+          : 1,
+      scaleY:
+        transform.scaleY !== 1
+          ? (active.rect.height * transform.scaleY) / dragOverlay.rect.height
+          : 1,
+    };
+    const finalTransform = CSS.Transform.toString({
+      x: transform.x - delta.x,
+      y: transform.y - delta.y,
+      ...scale,
+    });
+
+    const originalOpacity = active.node.style.getPropertyValue('opacity');
+
+    if (dragSourceOpacity != null) {
+      active.node.style.setProperty('opacity', `${dragSourceOpacity}`);
+    }
+
+    const animation = dragOverlay.node.animate(
+      [
+        {
+          transform: CSS.Transform.toString(transform),
+        },
+        {
+          transform: finalTransform,
+        },
+      ],
+      {
+        easing,
+        duration,
       }
-    }
+    );
 
-    setDropAnimationComplete(true);
-  }, [
-    animate,
-    activeId,
-    adjustScale,
-    draggableNodes,
-    duration,
-    easing,
-    dragSourceOpacity,
-    node,
-    transform,
-  ]);
+    return new Promise((resolve) => {
+      animation.onfinish = () => {
+        active.node.style.setProperty('opacity', originalOpacity);
 
-  useIsomorphicLayoutEffect(() => {
-    if (dropAnimationComplete) {
-      setDropAnimationComplete(false);
-    }
-  }, [dropAnimationComplete]);
-
-  return dropAnimationComplete;
+        resolve();
+      };
+    });
+  };
 }
