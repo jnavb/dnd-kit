@@ -10,6 +10,7 @@ export interface Props {
   columns?: number;
   label?: string;
   style?: React.CSSProperties;
+  innerStyle?: React.CSSProperties;
   horizontal?: boolean;
   hover?: boolean;
   handleProps?: React.HTMLAttributes<any>;
@@ -34,6 +35,7 @@ export const Container = forwardRef<HTMLDivElement, Props>(
       label,
       placeholder,
       style,
+      innerStyle,
       scrollable,
       shadow,
       unstyled,
@@ -74,7 +76,7 @@ export const Container = forwardRef<HTMLDivElement, Props>(
             </div>
           </div>
         ) : null}
-        {placeholder ? children : <ul>{children}</ul>}
+        {placeholder ? children : <ul style={innerStyle}>{children}</ul>}
       </Component>
     );
   }
