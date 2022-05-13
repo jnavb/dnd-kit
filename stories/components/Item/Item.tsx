@@ -8,6 +8,7 @@ import {Handle, Remove} from './components';
 import styles from './Item.module.css';
 
 export interface Props {
+  id?: string;
   dragOverlay?: boolean;
   color?: string;
   disabled?: boolean;
@@ -25,6 +26,7 @@ export interface Props {
   value: React.ReactNode;
   onRemove?(): void;
   renderItem?(args: {
+    id: string;
     dragOverlay: boolean;
     dragging: boolean;
     sorting: boolean;
@@ -43,6 +45,7 @@ export const Item = React.memo(
   React.forwardRef<HTMLLIElement, Props>(
     (
       {
+        id,
         color,
         dragOverlay,
         dragging,
@@ -76,7 +79,7 @@ export const Item = React.memo(
         };
       }, [dragOverlay]);
 
-      return renderItem ? (
+      return false ? (
         renderItem({
           dragOverlay: Boolean(dragOverlay),
           dragging: Boolean(dragging),
@@ -89,6 +92,7 @@ export const Item = React.memo(
           transform,
           transition,
           value,
+          id: id!,
         })
       ) : (
         <li
@@ -137,7 +141,22 @@ export const Item = React.memo(
             {...props}
             tabIndex={!handle ? 0 : undefined}
           >
-            {value}
+            {renderItem
+              ? renderItem({
+                  id: id!,
+                  dragOverlay: Boolean(dragOverlay),
+                  dragging: Boolean(dragging),
+                  sorting: Boolean(sorting),
+                  index,
+                  fadeIn: Boolean(fadeIn),
+                  listeners,
+                  ref,
+                  style,
+                  transform,
+                  transition,
+                  value,
+                })
+              : value}
             <span className={styles.Actions}>
               {onRemove ? (
                 <Remove className={styles.Remove} onClick={onRemove} />

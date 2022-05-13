@@ -116,6 +116,9 @@ interface Props {
   cancelDrop?: CancelDrop;
   columns?: number;
   containerStyle?: React.CSSProperties;
+  innerContainerStyle?: React.CSSProperties;
+  multipleContainerStyle?: React.CSSProperties;
+  addColumnStyle?: React.CSSProperties;
   coordinateGetter?: KeyboardCoordinateGetter;
   getItemStyles?(args: {
     value: UniqueIdentifier;
@@ -137,6 +140,7 @@ interface Props {
   trashable?: boolean;
   scrollable?: boolean;
   vertical?: boolean;
+  showAddContainer?: boolean;
 }
 
 export const TRASH_ID = 'void';
@@ -151,6 +155,9 @@ export function MultipleContainers({
   handle = false,
   items: initialItems,
   containerStyle,
+  innerContainerStyle,
+  multipleContainerStyle,
+  addColumnStyle,
   coordinateGetter = multipleContainersCoordinateGetter,
   getItemStyles = () => ({}),
   wrapperStyle = () => ({}),
@@ -160,6 +167,7 @@ export function MultipleContainers({
   strategy = verticalListSortingStrategy,
   trashable = false,
   vertical = false,
+  showAddContainer = true,
   scrollable,
 }: Props) {
   const [items, setItems] = useState<Items>(
@@ -444,6 +452,7 @@ export function MultipleContainers({
           boxSizing: 'border-box',
           padding: 20,
           gridAutoFlow: vertical ? 'row' : 'column',
+          ...multipleContainerStyle,
         }}
       >
         <SortableContext
@@ -463,6 +472,7 @@ export function MultipleContainers({
               items={items[containerId]}
               scrollable={scrollable}
               style={containerStyle}
+              innerStyle={innerContainerStyle}
               unstyled={minimal}
               onRemove={() => handleRemove(containerId)}
             >
@@ -486,10 +496,11 @@ export function MultipleContainers({
               </SortableContext>
             </DroppableContainer>
           ))}
-          {minimal ? undefined : (
+          {minimal && !showAddContainer ? undefined : (
             <DroppableContainer
               id={PLACEHOLDER_ID}
               disabled={isSortingContainer}
+              style={addColumnStyle}
               items={empty}
               onClick={handleAddColumn}
               placeholder
